@@ -113,10 +113,12 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     //   http://planning.cs.uiuc.edu/node99.html
 
     // Loop through all the particles
+    weights = vector<double>(); // Reinitialize weights
+
     for (auto &particle : particles) {
         // Take observations in the car's co-ord system, and transform them into
         // the map co-ord system.
-        std::vector<LandmarkObs> observations_map;
+        vector<LandmarkObs> observations_map;
 
         // Loop through all the observations for conversion
         for (auto &observation : observations) {
@@ -154,6 +156,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         }
 
         particle.weight = particle_weight;
+        weights.push_back(particle_weight);
     }
 }
 
@@ -162,6 +165,16 @@ void ParticleFilter::resample() {
     // NOTE: You may find std::discrete_distribution helpful here.
     //   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
 
+    default_random_engine gen;
+    discrete_distribution<int> distribution(weights.begin(), weights.end());
+    vector<Particle> next_particles;
+
+    for (int i = 0; i < num_particles; i++) {
+        int index = distribution(gen);
+        next_particles.push_back(particles[index]);
+    }
+
+    particles = next_particles;
 }
 
 Particle ParticleFilter::SetAssociations(Particle &particle, const std::vector<int> &associations,
