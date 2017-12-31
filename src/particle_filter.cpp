@@ -41,7 +41,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
         // While debugging prediction, set the no. of particles to 1
         num_particles = 1;
     } else {
-        num_particles = 100;
+        num_particles = 10;
     }
 
     // Initialize normal distributions
@@ -96,7 +96,9 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
             y = particle.y + velocity * delta_t * sin(particle.theta);
             theta = particle.theta;
 
-//            cout<<"YZ prediction ("<<x<<", "<<y<<", "<<theta<<") "<<endl;
+            if (debug_predict) {
+                cout<<"YZ prediction ("<<x<<", "<<y<<", "<<theta<<") "<<endl;
+            }
 
         } else { // If the yaw rate is not zero
             x = particle.x +
@@ -107,7 +109,9 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
             theta = particle.theta + yaw_rate * delta_t;
 
-//            cout<<"YNZ prediction ("<<x<<", "<<y<<", "<<theta<<") "<<endl;
+            if (debug_predict) {
+                cout<<"YNZ prediction ("<<x<<", "<<y<<", "<<theta<<") "<<endl;
+            }
         }
 
         // Add noise only if not debugging the predict function
@@ -178,14 +182,17 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
             const Map::single_landmark_s *best_landmark = nullptr;
 
             // Calculate euclidean distance to each map_landmark
+//            cout<<"DISTANCES ";
             for (auto &landmark : map_landmarks.landmark_list) {
                 double distance = sqrt(pow(observation.x - landmark.x_f, 2) + pow(observation.y - landmark.y_f, 2));
+//                cout<<distance<<", ";
 
                 if ((best_landmark == nullptr) || (distance < minimum_distance)) {
                     best_landmark = &landmark;
                     minimum_distance = distance;
                 }
             }
+//            cout<<endl;
 
             // Verify associations
             cout<<"Observation ("<<observation.x<<", "<<observation.y
@@ -195,9 +202,9 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 //            cout<<"min dist "<<minimum_distance<<best_landmark->id_i<<endl;
             // Calculate and update the weight
-            double gauss_norm = 1.0 / (2 * M_PI * std_landmark[0] * std_landmark[1]);
-            double exponent = pow(observation.x - best_landmark->x_f, 2) / (2 * pow(best_landmark->x_f, 2)) +
-                              pow(observation.y - best_landmark->y_f, 2) / (2 * pow(best_landmark->y_f, 2));
+            double gauss_norm = 1.0 / (2.0 * M_PI * std_landmark[0] * std_landmark[1]);
+            double exponent = pow(observation.x - best_landmark->x_f, 2) / (2 * pow(std_landmark[0], 2)) +
+                              pow(observation.y - best_landmark->y_f, 2) / (2 * pow(std_landmark[1], 2));
             double observation_weight = gauss_norm * exp(-exponent);
 
             particle_weight *= observation_weight;
