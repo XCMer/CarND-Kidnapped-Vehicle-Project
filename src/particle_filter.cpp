@@ -111,6 +111,50 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     //   and the following is a good resource for the actual equation to implement (look at equation
     //   3.33
     //   http://planning.cs.uiuc.edu/node99.html
+
+    // Loop through all the particles
+    for (auto &particle : particles) {
+        // Take observations in the car's co-ord system, and transform them into
+        // the map co-ord system.
+        std::vector<LandmarkObs> observations_map;
+
+        // Loop through all the observations for conversion
+        for (auto &observation : observations) {
+            double x = particle.x + observation.x * cos(particle.theta) - observation.y * sin(particle.theta);
+            double y = particle.y + observation.x * sin(particle.theta) + observation.y * cos(particle.theta);
+
+            observations_map.push_back(LandmarkObs{.id=observation.id, .x=x, .y=y});
+        }
+
+        // For each distance to land-mark from the observation, try associating it with the nearest
+        // landmark from the map
+        double particle_weight = 1.0;
+
+        for (auto &observation : observations_map) {
+            double minimum_distance = 0.0;
+            const Map::single_landmark_s *best_landmark = nullptr;
+
+            // Calculate euclidean distance to each map_landmark
+            for (auto &landmark : map_landmarks.landmark_list) {
+                double distance = sqrt(pow(observation.x - landmark.x_f, 2) + pow(observation.y - landmark.y_f, 2));
+
+                if ((best_landmark == nullptr) || (distance < minimum_distance)) {
+                    best_landmark = &landmark;
+                    minimum_distance = distance;
+                }
+            }
+
+            // Calculate and update the weight
+            double gauss_norm = 1.0 / (2 * M_PI * std_landmark[0] * std_landmark[1]);
+            double exponent = pow(observation.x - best_landmark->x_f, 2) / (2 * pow(best_landmark->x_f, 2)) +
+                              pow(observation.y - best_landmark->y_f, 2) / (2 * pow(best_landmark->y_f, 2));
+            double observation_weight = gauss_norm * exp(-exponent);
+
+            particle_weight *= observation_weight;
+        }
+
+        particle.weight = particle_weight;
+    }
 }
 
 void ParticleFilter::resample() {
