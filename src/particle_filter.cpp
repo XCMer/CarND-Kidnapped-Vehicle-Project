@@ -173,6 +173,23 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
             observations_map.push_back(LandmarkObs{.id=observation.id, .x=x, .y=y});
         }
 
+        // Get landmarks within range. This can still include extraneous points
+        // because we're not calculating the euclidean distance, but just the x
+        // and y distance in isolation. But it's still a big improvement compared
+        // to including all the landmarks.
+        vector<Map::single_landmark_s> landmarks_in_range;
+        for (auto &landmark : map_landmarks.landmark_list) {
+            if (fabs(particle.x - landmark.x_f) > sensor_range) {
+                continue;
+            }
+
+            if (fabs(particle.y - landmark.y_f) > sensor_range) {
+                continue;
+            }
+
+            landmarks_in_range.push_back(landmark);
+        }
+
         // For each distance to land-mark from the observation, try associating it with the nearest
         // landmark from the map
         double particle_weight = 1.0;
@@ -183,7 +200,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
             // Calculate euclidean distance to each map_landmark
 //            cout<<"DISTANCES ";
-            for (auto &landmark : map_landmarks.landmark_list) {
+            for (auto &landmark :landmarks_in_range) {
                 double distance = sqrt(pow(observation.x - landmark.x_f, 2) + pow(observation.y - landmark.y_f, 2));
 //                cout<<distance<<", ";
 
