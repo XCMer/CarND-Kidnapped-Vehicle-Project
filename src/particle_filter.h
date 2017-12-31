@@ -30,7 +30,8 @@ class ParticleFilter {
 	// Number of particles to draw
 	int num_particles; 
 	
-	
+	// Are we debugging the prediction step?
+	bool debug_predict;
 	
 	// Flag, if filter is initialized
 	bool is_initialized;

@@ -25,13 +25,24 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
     // Add random Gaussian noise to each particle.
     // NOTE: Consult particle_filter.h for more information about this method (and others in this file).
 
+    // Are we debugging the predict function? If yes, then noises are not added,
+    // and updateWeight & resample return without doing anything. No. of particles are also
+    // hardcoded to 1.
+    // https://discussions.udacity.com/t/debug-suggestion-testing-prediction-step/306124
+    debug_predict = false;
+
     // Check if already initialized
     if (initialized()) {
         return;
     }
 
     // Set no. of particles
-    num_particles = 100;
+    if (debug_predict) {
+        // While debugging prediction, set the no. of particles to 1
+        num_particles = 1;
+    } else {
+        num_particles = 100;
+    }
 
     // Initialize normal distributions
     normal_distribution<double> dist_x(x, std[0]);
@@ -41,11 +52,25 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
     // Create particles
     default_random_engine gen;
     for (int i = 0; i < num_particles; i++) {
-        particles.push_back(Particle {.id=i, .x=dist_x(gen), .y=dist_y(gen), .theta=dist_theta(gen), .weight=1});
+        if (debug_predict) {
+            // Don't add noise in debug mode
+            particles.push_back(Particle {.id=i, .x=x, .y=y, .theta=theta, .weight=1});
+        } else {
+            particles.push_back(Particle {.id=i, .x=dist_x(gen), .y=dist_y(gen), .theta=dist_theta(gen), .weight=1});
+        }
+    }
+
+    // Set weights
+    double uniform_weight = 1.0 / num_particles;
+    for (int i = 0; i < num_particles; i++) {
+        weights.push_back(uniform_weight);
     }
 
     // Set initialized
     is_initialized = true;
+
+    // Initial state is verified
+//    cout<<"Initial state: "<<particles[0].x<<", "<<particles[0].y<<", "<<particles[0].theta<<endl;
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate) {
@@ -64,30 +89,38 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
     // Loop through all the particles
     for (auto &particle : particles) {
         // Predict next state
-        if (fabs(yaw_rate) < 0.001) { // If the yaw rate is 0
-            double x = particle.x + velocity * delta_t * cos(particle.theta) + dist_x(gen);
-            double y = particle.y + velocity * delta_t * sin(particle.theta) + dist_y(gen);
-            double theta = particle.theta + dist_theta(gen); // Only add noise
+        double x, y, theta;
 
-            // Update the particle
-            particle.x = x;
-            particle.y = y;
-            particle.theta = theta;
+        if (fabs(yaw_rate) < 0.001) { // If the yaw rate is 0
+            x = particle.x + velocity * delta_t * cos(particle.theta);
+            y = particle.y + velocity * delta_t * sin(particle.theta);
+            theta = particle.theta;
+
+//            cout<<"YZ prediction ("<<x<<", "<<y<<", "<<theta<<") "<<endl;
 
         } else { // If the yaw rate is not zero
-            double x = particle.x +
-                       (velocity / yaw_rate) * (sin(particle.theta + yaw_rate * delta_t) - sin(particle.theta)) +
-                       dist_x(gen); // gaussian noise
-            double y = particle.y +
-                       (velocity / yaw_rate) * (cos(particle.theta) - cos(particle.theta - yaw_rate * delta_t)) +
-                       dist_y(gen); // gaussian noise
-            double theta = particle.theta + yaw_rate * delta_t + dist_theta(gen);
+            x = particle.x +
+                (velocity / yaw_rate) * (sin(particle.theta + yaw_rate * delta_t) - sin(particle.theta));
 
-            // Update the particle
-            particle.x = x;
-            particle.y = y;
-            particle.theta = theta;
+            y = particle.y +
+                (velocity / yaw_rate) * (cos(particle.theta) - cos(particle.theta + yaw_rate * delta_t));
+
+            theta = particle.theta + yaw_rate * delta_t;
+
+//            cout<<"YNZ prediction ("<<x<<", "<<y<<", "<<theta<<") "<<endl;
         }
+
+        // Add noise only if not debugging the predict function
+        if (!debug_predict) {
+            x += dist_x(gen);
+            y += dist_y(gen);
+            theta += dist_theta(gen);
+        }
+
+        // Update the particle
+        particle.x = x;
+        particle.y = y;
+        particle.theta = theta;
     }
 }
 
@@ -112,6 +145,11 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     //   3.33
     //   http://planning.cs.uiuc.edu/node99.html
 
+    // If debugging the predict function, don't do anything here
+    if (debug_predict) {
+        return;
+    }
+
     // Loop through all the particles
     weights = vector<double>(); // Reinitialize weights
 
@@ -124,6 +162,9 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
         for (auto &observation : observations) {
             double x = particle.x + observation.x * cos(particle.theta) - observation.y * sin(particle.theta);
             double y = particle.y + observation.x * sin(particle.theta) + observation.y * cos(particle.theta);
+
+            // Observations are verified
+//            cout<<"Observation ("<<observation.x<<", "<<observation.y<<") -> ("<<x<<", "<<y<<")"<<endl;
 
             observations_map.push_back(LandmarkObs{.id=observation.id, .x=x, .y=y});
         }
@@ -146,6 +187,13 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
                 }
             }
 
+            // Verify associations
+            cout<<"Observation ("<<observation.x<<", "<<observation.y
+                <<") -> Landmark ("<<best_landmark->x_f<<", "<<best_landmark->y_f<<")"
+                <<" min dist "<<minimum_distance<<endl;
+
+
+//            cout<<"min dist "<<minimum_distance<<best_landmark->id_i<<endl;
             // Calculate and update the weight
             double gauss_norm = 1.0 / (2 * M_PI * std_landmark[0] * std_landmark[1]);
             double exponent = pow(observation.x - best_landmark->x_f, 2) / (2 * pow(best_landmark->x_f, 2)) +
@@ -164,6 +212,11 @@ void ParticleFilter::resample() {
     // TODO: Resample particles with replacement with probability proportional to their weight.
     // NOTE: You may find std::discrete_distribution helpful here.
     //   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
+
+    // If debugging the predict function, don't do anything here
+    if (debug_predict) {
+        return;
+    }
 
     default_random_engine gen;
     discrete_distribution<int> distribution(weights.begin(), weights.end());
